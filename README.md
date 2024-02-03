@@ -9,4 +9,5 @@ A basic text editor that should render text in a linux terminal that meets the f
 * contain basic functionality that allows the user to undo and redo changes
 
 # Current todo:
-* implement a method of reading Stdin in raw mode (i.e. not canonical mode)
+* Create a buffer for text contents and a way to render said buffer to the screen
+
