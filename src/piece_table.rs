@@ -36,16 +36,18 @@ pub enum PieceTableError {
     IOError(std::io::Error),
 }
 
-pub enum PieceID {
+#[derive(Clone, Debug)]
+pub enum PieceBuf {
     ORIGINAL,
     ADDITION,
 }
 
 
-struct Piece {
+#[derive(Debug)]
+pub struct Piece {
     start: usize,
     stop: usize,
-    content: PieceID
+    content: PieceBuf
 }
 
 
@@ -59,7 +61,7 @@ impl PieceTable {
     /// Create a `PieceTable` from `s`.
     pub fn from_string(s:String) -> Self {
         let mut pieces = Vec::new();
-        pieces.push(Piece { start: 0, stop: s.len(), content: PieceID::ORIGINAL });
+        pieces.push(Piece { start: 0, stop: s.len(), content: PieceBuf::ORIGINAL });
         Self { original: s, addition: String::new(), pieces }
     }
 
@@ -67,23 +69,73 @@ impl PieceTable {
     pub fn from_str(s: &str) -> Self {
         let s = String::from(s);
         let mut pieces = Vec::new();
-        pieces.push(Piece { start: 0, stop: s.len(), content: PieceID::ORIGINAL });
+        pieces.push(Piece { start: 0, stop: s.len(), content: PieceBuf::ORIGINAL });
         Self { original: s, addition: String::new(), pieces }
     }
 
+    pub fn get_pieces(&self) -> &Vec<Piece> {
+        &self.pieces
+    }
 
     /// Insert `content` at character number `loc`.
     ///
     /// # Examples
     /// ```
     /// use text_editor::piece_table::PieceTable;
-    /// let piece_table = PieceTable::from_str("hello world");
+    /// let mut piece_table = PieceTable::from_str("hello world");
     /// piece_table.write_to_loc(5, "123");
     /// let new_string = piece_table.write_contents_to_string();
     /// assert_eq!(&new_string, "hello123 world");
     /// ```
     pub fn write_to_loc(&mut self, loc: usize, content: &str) {
-        // TODO: IMPLEMENT HERE
+        // Need to find a neat solution for finding the starting point 
+        // for loc then the rest is simple
+        // find respective piece, split (most likely), and insert
+
+    }
+
+    /// Split a piece a `loc`.
+    ///
+    /// # Errors
+    /// Each call to `split_piece` may generate the following errors:
+    /// * `GotBadPieceID` if `piece_id` does not exists.
+    /// * `GotBadPieceRange` if `loc` is outside of the range defined
+    /// in the piece given by `piece_id`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use text_editor::piece_table::*;
+    /// let mut piece_table = PieceTable::from_str("hello world!");
+    /// piece_table.split_piece(0, 5);
+    /// let pieces = piece_table.get_pieces();
+    /// assert_eq!(
+    ///     pieces.get(0).unwrap(),
+    ///     Piece { start: 0, stop: 5, content: PieceBuf::ORIGINAL }
+    /// );
+    /// assert_eq!(
+    ///     pieces.get(1).unwrap(),
+    ///     Piece { start: 5, stop: 11, content: PieceBuf::ORIGINAL }
+    /// );
+    /// ```
+    pub fn split_piece(&mut self, piece_id: usize, loc: usize) -> 
+        Result<(), PieceTableError> {
+        let piece = self.pieces
+            .get_mut(piece_id)
+            .ok_or(PieceTableError::GotBadPieceID)?;
+
+        if loc <= 0 || loc >= piece.stop {
+            let new_piece_stop= piece.stop;
+            piece.stop = loc;
+            let new_piece = Piece { 
+                start: loc, stop: new_piece_stop, content: piece.content.clone()
+            };
+            self.pieces.insert(piece_id + 1, new_piece);
+        } else {
+            return Err(PieceTableError::GotBadPieceID);
+        };
+
+        Ok(())
     }
 
     /// Write contents of `self` to `stream` in correct order 
@@ -100,8 +152,8 @@ impl PieceTable {
 
         for piece in &self.pieces {
             let buf = match &piece.content {
-                PieceID::ORIGINAL => &self.original,
-                PieceID::ADDITION => &self.addition,
+                PieceBuf::ORIGINAL => &self.original,
+                PieceBuf::ADDITION => &self.addition,
             };
             let buf = buf
                 .get(piece.start..piece.stop)
@@ -116,9 +168,10 @@ impl PieceTable {
     /// Write contents of `self` to `String` in correct order.
     ///
     /// # Examples
+    ///
     /// ```
     /// use text_editor::piece_table::PieceTable;
-    /// let piece_table = PieceTable::from_str("hello world!");
+    /// let mut piece_table = PieceTable::from_str("hello world!");
     /// piece_table.write_to_loc(5, "123")
     /// let contents = piece_table.write_contents_to_string();
     /// assert_eq!(contents, String::from("hello123 world"));
@@ -157,3 +210,5 @@ mod tests {
     fn write_piece_table_additions_correctly() {
     }
 }
+
+
