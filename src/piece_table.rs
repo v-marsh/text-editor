@@ -2,7 +2,7 @@ use std::io::Write;
 
 mod string_writer {
 
-    use super::*;
+    use std::io::{ Write, ErrorKind };
 
     pub struct StringWriter {
         pub contents: String,
@@ -18,12 +18,12 @@ mod string_writer {
         fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
             let len = buf.len();
             self.contents.push_str(&String::from_utf8(buf.to_vec())
-                .map_err(|_| std::io::ErrorKind::InvalidData)?
+                .map_err(|_| ErrorKind::InvalidData)?
             );
             Ok(len)
         }
         
-        fn flush(&mut self) -> std::io::Result<()> {
+        fn flush(&mut self) -> Result<()> {
             Ok(())
         }
     }
@@ -42,7 +42,6 @@ pub enum PieceBuf {
     ADDITION,
 }
 
-
 #[derive(Debug)]
 pub struct Piece {
     start: usize,
@@ -50,11 +49,11 @@ pub struct Piece {
     content: PieceBuf
 }
 
-
 pub struct PieceTable {
     original: String,
     addition: String,
     pieces: Vec<Piece>,
+    current_piece_id: usize,
 }
 
 impl PieceTable {
@@ -62,7 +61,7 @@ impl PieceTable {
     pub fn from_string(s:String) -> Self {
         let mut pieces = Vec::new();
         pieces.push(Piece { start: 0, stop: s.len(), content: PieceBuf::ORIGINAL });
-        Self { original: s, addition: String::new(), pieces }
+        Self { original: s, addition: String::new(), pieces, current_piece_id: 0 }
     }
 
     /// Create a `PieceTable` from `s`.
@@ -70,14 +69,14 @@ impl PieceTable {
         let s = String::from(s);
         let mut pieces = Vec::new();
         pieces.push(Piece { start: 0, stop: s.len(), content: PieceBuf::ORIGINAL });
-        Self { original: s, addition: String::new(), pieces }
+        Self { original: s, addition: String::new(), pieces, current_piece_id: 0 }
     }
 
     pub fn get_pieces(&self) -> &Vec<Piece> {
         &self.pieces
     }
 
-    /// Insert `content` at character number `loc`.
+    /// Insert `content` at `loc` in buffer.
     ///
     /// # Examples
     /// ```
@@ -88,13 +87,48 @@ impl PieceTable {
     /// assert_eq!(&new_string, "hello123 world");
     /// ```
     pub fn write_to_loc(&mut self, loc: usize, content: &str) {
-        // Need to find a neat solution for finding the starting point 
+        // Need to find a neat solution for finding the starting point
         // for loc then the rest is simple
         // find respective piece, split (most likely), and insert
+        // This is most easily solved by iterating through the pieces
+        // in self.pieces and summing the lengths ()
+
+        let buf_id: usize;
+        let buf_start_loc: usize;
+        let mut current_loc = 0;
+        let mut next_loc = 0;
+
+        for (id, piece) in self.pieces.iter().enumerate() {
+            next_loc += piece.stop - piece.start;
+            if next_loc >= loc {
+                buf_id = id;
+                buf_start_loc = current_loc;
+                break;
+            }
+            current_loc = next_loc;
+        }
+
 
     }
 
-    /// Split a piece a `loc`.
+    /// Append `content` to the last piece that was written to.
+    ///
+    /// # Examples
+    /// ```
+    /// use text_editor::piece_table::PieceTable;
+    /// let mut piece_table = PieceTable::from_str("hello world");
+    /// piece_table.write_to_loc(5, "123");
+    /// piece_table.write_to_current_piece("new");
+    /// piece_table.write_to_loc(1, "22");
+    /// piece_table.write_to_current_piece("test");
+    /// contents = piece_table.write_contents_to_string();
+    /// assert_eq!(contents, "h22testello123new world");
+    /// ```
+    pub fn write_to_current_piece(&mut self, content: &str) {
+        todo!();
+    }
+
+    /// Split a piece at `loc`.
     ///
     /// # Errors
     /// Each call to `split_piece` may generate the following errors:
@@ -142,27 +176,27 @@ impl PieceTable {
     ///
     /// # Errors
     /// Each call to `write_contents_to_stream` may generate the following 
-    /// errors:
+    /// PieceTableError errors:
     /// * `GotBadPieceID` if a piece trys to reference a non-existant 
     /// piece number.
     /// * `IOError` wrapping any errors from calling `write` on `stream`.
     pub fn write_contents_to_stream<T: Write>(&self, stream: &mut T) -> 
         Result<usize, PieceTableError> {
-        let mut bytes = 0;
+        let mut n_bytes = 0;
 
         for piece in &self.pieces {
             let buf = match &piece.content {
                 PieceBuf::ORIGINAL => &self.original,
                 PieceBuf::ADDITION => &self.addition,
             };
-            let buf = buf
+            let contents = buf
                 .get(piece.start..piece.stop)
                 .ok_or(PieceTableError::GotBadPieceRange)?;
-            bytes += stream.write(buf.as_bytes())
+            n_bytes += stream.write(contents.as_bytes())
                 .or_else(|err| Err(PieceTableError::IOError(err)))?;
         }
 
-        Ok(bytes)
+        Ok(n_bytes)
     }
 
     /// Write contents of `self` to `String` in correct order.
@@ -210,5 +244,6 @@ mod tests {
     fn write_piece_table_additions_correctly() {
     }
 }
+
 
 
