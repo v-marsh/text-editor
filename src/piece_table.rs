@@ -283,13 +283,9 @@ mod tests {
     fn piece_table_write_to_current_piece() {
         let mut piece_table = PieceTable::from_str("hello world");
         piece_table.write_to_loc(5, "123").unwrap();
-        println!("{}", piece_table.write_contents_to_string());
         piece_table.write_to_current_piece("new").unwrap();
-        println!("{}", piece_table.write_contents_to_string());
         piece_table.write_to_loc(1, "22").unwrap();
-        println!("{}", piece_table.write_contents_to_string());
         piece_table.write_to_current_piece("test").unwrap();
-        println!("{}", piece_table.write_contents_to_string());
         let contents = piece_table.write_contents_to_string();
         assert_eq!(contents, "h22testello123new world");
     }
@@ -310,6 +306,3 @@ mod tests {
     }
 
 }
-
-
-

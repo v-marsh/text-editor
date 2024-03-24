@@ -9,7 +9,4 @@ A basic text editor that should render text in a linux terminal that meets the f
 * contain basic functionality that allows the user to undo and redo changes
 
 # Current todo:
-* Fix all documentation tests by moving them into unittests. While this is super
-annoying it is the only way to debug them as of right now (they currently all 
-fail).
-
+* merge all commits and push to main
