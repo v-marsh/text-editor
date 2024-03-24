@@ -93,23 +93,14 @@ impl PieceTable {
         &self.pieces
     }
 
-    /// Insert `content` at `loc` in buffer.
+    /// Insert `content` at `loc` in buffer and return the number of 
+    /// characters written.
     ///
-    /// # Examples
-    /// ```
-    /// use text_editor::piece_table::PieceTable;
-    /// let mut piece_table = PieceTable::from_str("hello world");
-    /// piece_table.write_to_loc(5, "123").unwrap();
-    /// let new_string = piece_table.write_contents_to_string();
-    /// assert_eq!(&new_string, "hello123 world");
-    /// ```
+    /// # Errors
+    /// * `PieceTableError::GotBadLoc` if loc does not exists in the 
+    /// current buffer.
     pub fn write_to_loc(&mut self, loc: usize, content: &str) ->
-        Result<(), PieceTableError> {
-        // Need to find a neat solution for finding the starting point
-        // for loc then the rest is simple
-        // find respective piece, split (most likely), and insert
-        // This is most easily solved by iterating through the pieces
-        // in self.pieces and summing the lengths ()
+        Result<usize, PieceTableError> {
 
         let mut piece: Option<&Piece> = None;
         let mut piece_id: Option<usize> = None;
@@ -138,66 +129,73 @@ impl PieceTable {
         // inputting.
         if loc != piece_start_loc + piece.len() {
             let piece_loc = loc - piece_start_loc;
-            self.split_piece(piece_id, piece_loc).map_err(|_| PieceTableError::GotBadLoc)?;  
+            self.split_piece(piece_id, piece_loc)
+                .map_err(|_| PieceTableError::GotBadLoc)?;  
         }       
         
         let start = self.addition.len();
         self.addition.push_str(content);
         let stop = self.addition.len();
+        let n_chars = stop - start;
+
         let new_piece = Piece { start, stop, content: PieceBuf::ADDITION };
-        self.pieces.insert(piece_id + 1, new_piece);
+        let new_piece_id = piece_id + 1;
+        self.pieces.insert(new_piece_id, new_piece);
+        self.current_piece_id = new_piece_id;
 
-        Ok(())
+
+        Ok(n_chars)
     }
 
-    /// Append `content` to the last piece that was written to.
+    
+    /// Append `content` to the last piece that was written to and 
+    /// returns the number of characters that were written. The last 
+    /// piece written to is usually set by the last call to 
+    /// `self.write_to_loc`.
     ///
-    /// # Examples
-    /// ```
-    /// use text_editor::piece_table::PieceTable;
-    /// let mut piece_table = PieceTable::from_str("hello world");
-    /// piece_table.write_to_loc(5, "123");
-    /// piece_table.write_to_current_piece("new");
-    /// piece_table.write_to_loc(1, "22");
-    /// piece_table.write_to_current_piece("test");
-    /// let contents = piece_table.write_contents_to_string();
-    /// assert_eq!(contents, "h22testello123new world");
-    /// ```
-    pub fn write_to_current_piece(&mut self, content: &str) {
-        todo!();
+    /// # Errors
+    /// * If the last piece written to does not point to the end of 
+    /// `self.addition` then returns `PieceTableError::GotBadPieceID`
+    /// * If the last range of the last piece pointed to does not
+    /// contain the final charcter in `self.addition` the returns
+    /// `PieceTableError::GotBadPieceRange`.
+    pub fn write_to_current_piece(&mut self, content: &str) -> 
+        Result<usize, PieceTableError> 
+    {
+        // Can always unwrap here since any failure indicates that 
+        // the tracking of current_piece_id has failed, which is an 
+        // un-recoverable error.
+        let piece = self.pieces.get_mut(self.current_piece_id).unwrap();
+
+        if piece.content != PieceBuf::ADDITION { 
+            return Err(PieceTableError::GotBadPieceID);
+        }
+        if piece.stop != self.addition.len() {
+            return Err(PieceTableError::GotBadPieceRange);
+        }
+
+        let n_chars = content.chars().count();
+
+        piece.stop += n_chars;
+        self.addition.push_str(content);
+        #[cfg(debug_assertions)]
+        {
+            assert_eq!(self.addition.len(), piece.stop);
+        }
+
+        Ok(n_chars)
+        
     }
 
-    /// Split a piece at `loc`, the distance from the start of the 
+    /// Split a piece at `piece_loc`, the distance from the start of the 
     /// piece.
     ///
     /// # Errors
     /// Each call to `split_piece` may generate the following errors:
     /// * `GotBadPieceID` if `piece_id` does not exists.
-    /// * `GotBadPieceRange` if `loc` is outside of the range defined
-    /// in the piece given by `piece_id`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use text_editor::piece_table::*;
-    /// let mut piece_table = PieceTable::from_str("hello world!");
-    /// piece_table.split_piece(0, 5);
-    /// piece_table.split_piece(1, 2);
-    /// let pieces = piece_table.get_pieces();
-    /// assert_eq!(
-    ///     pieces.get(0).unwrap(),
-    ///     &Piece { start: 0, stop: 5, content: PieceBuf::ORIGINAL }
-    /// );
-    /// assert_eq!(
-    ///     pieces.get(1).unwrap(),
-    ///     &Piece { start: 5, stop: 11, content: PieceBuf::ORIGINAL }
-    /// );
-    /// assert_eq!(
-    ///     pieces.get(2).unwrap(), 
-    ///     &Piece { start: 7, stop: 11, content: PieceBuf::ORIGINAL }
-    /// )
-    /// ```
-    pub fn split_piece(&mut self, piece_id: usize, piece_loc: usize) -> 
+    /// * `GotBadPieceRange` if `piece_loc` is outside of the range of 
+    /// the piece given by `piece_id`.
+    fn split_piece(&mut self, piece_id: usize, piece_loc: usize) -> 
         Result<(), PieceTableError> {
         let piece = self.pieces
             .get_mut(piece_id)
@@ -205,16 +203,18 @@ impl PieceTable {
 
         let true_loc = piece_loc + piece.start;
 
-        if true_loc <= piece.start || true_loc >= piece.stop {
-            let new_piece_stop = piece.stop;
-            piece.stop = true_loc;
-            let new_piece = Piece { 
-                start: true_loc, stop: new_piece_stop, content: piece.content.clone()
-            };
-            self.pieces.insert(piece_id + 1, new_piece);
-        } else {
+        if !(true_loc >= piece.start || true_loc <= piece.stop) {
             return Err(PieceTableError::GotBadPieceRange);
+        }
+
+        let new_piece_stop = piece.stop;
+        piece.stop = true_loc;
+        let new_piece = Piece { 
+            start: true_loc, 
+            stop: new_piece_stop, 
+            content: piece.content.clone()
         };
+        self.pieces.insert(piece_id + 1, new_piece);
 
         Ok(())
     }
@@ -247,16 +247,6 @@ impl PieceTable {
     }
 
     /// Write contents of `self` to `String` in correct order.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use text_editor::piece_table::PieceTable;
-    /// let mut piece_table = PieceTable::from_str("hello world!");
-    /// piece_table.write_to_loc(5, "123");
-    /// let contents = piece_table.write_contents_to_string();
-    /// assert_eq!(contents, String::from("hello123 world"));
-    /// ```
     pub fn write_contents_to_string(&self) -> String {
         let mut writer = string_writer::StringWriter::new();
         // NOTE: Need to hangle unwrap in a more suitable fasion
@@ -268,28 +258,57 @@ impl PieceTable {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use string_writer::StringWriter;
-    
 
     #[test]
-    /// Check that `PieceTable::write_contents_to_stream` writes the 
-    /// contents of `self.original` correctly to stream.
-    fn write_piece_table_original_correctly() {
-        let string = String::from("hello world!");
-        let mut stream = StringWriter::new();
-        
-        let piece_table = PieceTable::from_string(string.clone());
-
-        piece_table.write_contents_to_stream(&mut stream).unwrap();
-
-        assert!(string == stream.contents);
+    fn piece_table_split_piece() {
+        let mut piece_table = PieceTable::from_str("hello world!");
+        piece_table.split_piece(0, 5).unwrap();
+        piece_table.split_piece(1, 2).unwrap();
+        let pieces = piece_table.get_pieces();
+        assert_eq!(
+            pieces.get(0).unwrap(),
+            &Piece { start: 0, stop: 5, content: PieceBuf::ORIGINAL }
+        );
+        assert_eq!(
+            pieces.get(1).unwrap(),
+            &Piece { start: 5, stop: 7, content: PieceBuf::ORIGINAL }
+        );
+        assert_eq!(
+            pieces.get(2).unwrap(), 
+            &Piece { start: 7, stop: 12, content: PieceBuf::ORIGINAL }
+        )
     }
 
     #[test]
-    /// Check that `PieceTable::write_contents_to_steam` writes the 
-    /// contents of `self.original` and `self.add` correctly to steam.
-    fn write_piece_table_additions_correctly() {
+    fn piece_table_write_to_current_piece() {
+        let mut piece_table = PieceTable::from_str("hello world");
+        piece_table.write_to_loc(5, "123").unwrap();
+        println!("{}", piece_table.write_contents_to_string());
+        piece_table.write_to_current_piece("new").unwrap();
+        println!("{}", piece_table.write_contents_to_string());
+        piece_table.write_to_loc(1, "22").unwrap();
+        println!("{}", piece_table.write_contents_to_string());
+        piece_table.write_to_current_piece("test").unwrap();
+        println!("{}", piece_table.write_contents_to_string());
+        let contents = piece_table.write_contents_to_string();
+        assert_eq!(contents, "h22testello123new world");
     }
+
+    #[test]
+    fn piece_table_write_to_loc_bad_loc() {
+        let mut piece_table = PieceTable::from_str("hello world");
+        let output = piece_table.write_to_loc(20, "test");
+        if let Err(PieceTableError::GotBadLoc) = output {} else { panic!() }
+    }
+
+    #[test]
+    fn piece_table_write_to_loc() {
+        let mut piece_table = PieceTable::from_str("hello world");
+        piece_table.write_to_loc(5, "123").unwrap();
+        let new_string = piece_table.write_contents_to_string();
+        assert_eq!(&new_string, "hello123 world");
+    }
+
 }
 
 
