@@ -9,4 +9,9 @@ A basic text editor that should render text in a linux terminal that meets the f
 * contain basic functionality that allows the user to undo and redo changes
 
 # Current todo:
-* merge all commits and push to main
+* [ ] Create cursor object to determine location of insertions/deletion
+    * [  ] find solution for situation when cursor is a and edge and asked to move off the page
+* allow appending to the end of a text buffer and have text load to 
+screen
+    * [ ] this requires completing the comment on line 57 in src/editor.rs
+    [here](src/editor.rs)

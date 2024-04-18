@@ -89,6 +89,17 @@ impl PieceTable {
         Self::from_string(s)
     }
 
+    pub fn new() -> Self {
+        let mut pieces = Vec::new();
+        pieces.push(Piece { start: 0, stop: 0, content: PieceBuf::ORIGINAL });
+        Self { 
+            original: String::new(),
+			addition: String::new(),
+			pieces,
+			current_piece_id: 0
+        }
+    }
+
     pub fn get_pieces(&self) -> &Vec<Piece> {
         &self.pieces
     }
