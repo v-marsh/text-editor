@@ -2,7 +2,7 @@ use std::io::Write;
 
 mod string_writer {
 
-    use std::io::{ Write, ErrorKind };
+    use std::io::{ErrorKind, Write};
 
     pub struct StringWriter {
         pub contents: String,
@@ -10,19 +10,20 @@ mod string_writer {
 
     impl StringWriter {
         pub fn new() -> Self {
-            Self { contents: String::new() }
+            Self {
+                contents: String::new(),
+            }
         }
-    } 
+    }
 
     impl Write for StringWriter {
         fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
             let len = buf.len();
-            self.contents.push_str(&String::from_utf8(buf.to_vec())
-                .map_err(|_| ErrorKind::InvalidData)?
-            );
+            self.contents
+                .push_str(&String::from_utf8(buf.to_vec()).map_err(|_| ErrorKind::InvalidData)?);
             Ok(len)
         }
-        
+
         fn flush(&mut self) -> std::io::Result<()> {
             Ok(())
         }
@@ -47,7 +48,7 @@ pub enum PieceBuf {
 pub struct Piece {
     pub start: usize,
     pub stop: usize,
-    pub content: PieceBuf
+    pub content: PieceBuf,
 }
 
 impl Piece {
@@ -77,10 +78,19 @@ pub struct PieceTable {
 
 impl PieceTable {
     /// Create a `PieceTable` from `s`.
-    pub fn from_string(s:String) -> Self {
+    pub fn from_string(s: String) -> Self {
         let mut pieces = Vec::new();
-        pieces.push(Piece { start: 0, stop: s.len(), content: PieceBuf::ORIGINAL });
-        Self { original: s, addition: String::new(), pieces, current_piece_id: 0 }
+        pieces.push(Piece {
+            start: 0,
+            stop: s.len(),
+            content: PieceBuf::ORIGINAL,
+        });
+        Self {
+            original: s,
+            addition: String::new(),
+            pieces,
+            current_piece_id: 0,
+        }
     }
 
     /// Create a `PieceTable` from `s`.
@@ -89,14 +99,19 @@ impl PieceTable {
         Self::from_string(s)
     }
 
+    /// Create an empty `PieceTable`
     pub fn new() -> Self {
         let mut pieces = Vec::new();
-        pieces.push(Piece { start: 0, stop: 0, content: PieceBuf::ORIGINAL });
-        Self { 
+        pieces.push(Piece {
+            start: 0,
+            stop: 0,
+            content: PieceBuf::ORIGINAL,
+        });
+        Self {
             original: String::new(),
-			addition: String::new(),
-			pieces,
-			current_piece_id: 0
+            addition: String::new(),
+            pieces,
+            current_piece_id: 0,
         }
     }
 
@@ -104,15 +119,13 @@ impl PieceTable {
         &self.pieces
     }
 
-    /// Insert `content` at `loc` in buffer and return the number of 
+    /// Insert `content` at `loc` in buffer and return the number of
     /// characters written.
     ///
     /// # Errors
-    /// * `PieceTableError::GotBadLoc` if loc does not exists in the 
+    /// * `PieceTableError::GotBadLoc` if loc does not exists in the
     /// current buffer.
-    pub fn write_to_loc(&mut self, loc: usize, content: &str) ->
-        Result<usize, PieceTableError> {
-
+    pub fn write_to_loc(&mut self, loc: usize, content: &str) -> Result<usize, PieceTableError> {
         let mut piece: Option<&Piece> = None;
         let mut piece_id: Option<usize> = None;
         let mut piece_start_loc: Option<usize> = None;
@@ -122,7 +135,7 @@ impl PieceTable {
         for (id, _piece) in self.pieces.iter().enumerate() {
             next_loc += _piece.len();
             if next_loc >= loc {
-                // This can always be safely unwrapped since id is 
+                // This can always be safely unwrapped since id is
                 // bounded by the lenth of self.pieces
                 piece = Some(&self.pieces.get(id).unwrap());
                 piece_id = Some(id);
@@ -131,7 +144,7 @@ impl PieceTable {
             }
             current_loc = next_loc;
         }
-        
+
         let piece = piece.ok_or(PieceTableError::GotBadLoc)?;
         let piece_id = piece_id.ok_or(PieceTableError::GotBadLoc)?;
         let piece_start_loc = piece_start_loc.ok_or(PieceTableError::GotBadLoc)?;
@@ -141,44 +154,44 @@ impl PieceTable {
         if loc != piece_start_loc + piece.len() {
             let piece_loc = loc - piece_start_loc;
             self.split_piece(piece_id, piece_loc)
-                .map_err(|_| PieceTableError::GotBadLoc)?;  
-        }       
-        
+                .map_err(|_| PieceTableError::GotBadLoc)?;
+        }
+
         let start = self.addition.len();
         self.addition.push_str(content);
         let stop = self.addition.len();
         let n_chars = stop - start;
 
-        let new_piece = Piece { start, stop, content: PieceBuf::ADDITION };
+        let new_piece = Piece {
+            start,
+            stop,
+            content: PieceBuf::ADDITION,
+        };
         let new_piece_id = piece_id + 1;
         self.pieces.insert(new_piece_id, new_piece);
         self.current_piece_id = new_piece_id;
 
-
         Ok(n_chars)
     }
 
-    
-    /// Append `content` to the last piece that was written to and 
-    /// returns the number of characters that were written. The last 
-    /// piece written to is usually set by the last call to 
+    /// Append `content` to the last piece that was written to and
+    /// returns the number of characters that were written. The last
+    /// piece written to is usually set by the last call to
     /// `self.write_to_loc`.
     ///
     /// # Errors
-    /// * If the last piece written to does not point to the end of 
+    /// * If the last piece written to does not point to the end of
     /// `self.addition` then returns `PieceTableError::GotBadPieceID`
     /// * If the last range of the last piece pointed to does not
     /// contain the final charcter in `self.addition` the returns
     /// `PieceTableError::GotBadPieceRange`.
-    pub fn write_to_current_piece(&mut self, content: &str) -> 
-        Result<usize, PieceTableError> 
-    {
-        // Can always unwrap here since any failure indicates that 
-        // the tracking of current_piece_id has failed, which is an 
+    pub fn write_to_current_piece(&mut self, content: &str) -> Result<usize, PieceTableError> {
+        // Can always unwrap here since any failure indicates that
+        // the tracking of current_piece_id has failed, which is an
         // un-recoverable error.
         let piece = self.pieces.get_mut(self.current_piece_id).unwrap();
 
-        if piece.content != PieceBuf::ADDITION { 
+        if piece.content != PieceBuf::ADDITION {
             return Err(PieceTableError::GotBadPieceID);
         }
         if piece.stop != self.addition.len() {
@@ -195,20 +208,19 @@ impl PieceTable {
         }
 
         Ok(n_chars)
-        
     }
 
-    /// Split a piece at `piece_loc`, the distance from the start of the 
+    /// Split a piece at `piece_loc`, the distance from the start of the
     /// piece.
     ///
     /// # Errors
     /// Each call to `split_piece` may generate the following errors:
     /// * `GotBadPieceID` if `piece_id` does not exists.
-    /// * `GotBadPieceRange` if `piece_loc` is outside of the range of 
+    /// * `GotBadPieceRange` if `piece_loc` is outside of the range of
     /// the piece given by `piece_id`.
-    fn split_piece(&mut self, piece_id: usize, piece_loc: usize) -> 
-        Result<(), PieceTableError> {
-        let piece = self.pieces
+    fn split_piece(&mut self, piece_id: usize, piece_loc: usize) -> Result<(), PieceTableError> {
+        let piece = self
+            .pieces
             .get_mut(piece_id)
             .ok_or(PieceTableError::GotBadPieceID)?;
 
@@ -220,26 +232,28 @@ impl PieceTable {
 
         let new_piece_stop = piece.stop;
         piece.stop = true_loc;
-        let new_piece = Piece { 
-            start: true_loc, 
-            stop: new_piece_stop, 
-            content: piece.content.clone()
+        let new_piece = Piece {
+            start: true_loc,
+            stop: new_piece_stop,
+            content: piece.content.clone(),
         };
         self.pieces.insert(piece_id + 1, new_piece);
 
         Ok(())
     }
 
-    /// Write contents of `self` to `stream` in correct order 
+    /// Write contents of `self` to `stream` in correct order
     ///
     /// # Errors
-    /// Each call to `write_contents_to_stream` may generate the following 
+    /// Each call to `write_contents_to_stream` may generate the following
     /// PieceTableError errors:
-    /// * `GotBadPieceID` if a piece trys to reference a non-existant 
+    /// * `GotBadPieceID` if a piece trys to reference a non-existant
     /// piece number.
     /// * `IOError` wrapping any errors from calling `write` on `stream`.
-    pub fn write_contents_to_stream<T: Write>(&self, stream: &mut T) -> 
-        Result<usize, PieceTableError> {
+    pub fn write_contents_to_stream<T: Write>(
+        &self,
+        stream: &mut T,
+    ) -> Result<usize, PieceTableError> {
         let mut n_bytes = 0;
 
         for piece in &self.pieces {
@@ -250,7 +264,8 @@ impl PieceTable {
             let contents = buf
                 .get(piece.start..piece.stop)
                 .ok_or(PieceTableError::GotBadPieceRange)?;
-            n_bytes += stream.write(contents.as_bytes())
+            n_bytes += stream
+                .write(contents.as_bytes())
                 .or_else(|err| Err(PieceTableError::IOError(err)))?;
         }
 
@@ -264,7 +279,7 @@ impl PieceTable {
         self.write_contents_to_stream(&mut writer).unwrap();
         writer.contents
     }
-}    
+}
 
 #[cfg(test)]
 mod tests {
@@ -278,15 +293,27 @@ mod tests {
         let pieces = piece_table.get_pieces();
         assert_eq!(
             pieces.get(0).unwrap(),
-            &Piece { start: 0, stop: 5, content: PieceBuf::ORIGINAL }
+            &Piece {
+                start: 0,
+                stop: 5,
+                content: PieceBuf::ORIGINAL
+            }
         );
         assert_eq!(
             pieces.get(1).unwrap(),
-            &Piece { start: 5, stop: 7, content: PieceBuf::ORIGINAL }
+            &Piece {
+                start: 5,
+                stop: 7,
+                content: PieceBuf::ORIGINAL
+            }
         );
         assert_eq!(
-            pieces.get(2).unwrap(), 
-            &Piece { start: 7, stop: 12, content: PieceBuf::ORIGINAL }
+            pieces.get(2).unwrap(),
+            &Piece {
+                start: 7,
+                stop: 12,
+                content: PieceBuf::ORIGINAL
+            }
         )
     }
 
@@ -305,7 +332,10 @@ mod tests {
     fn piece_table_write_to_loc_bad_loc() {
         let mut piece_table = PieceTable::from_str("hello world");
         let output = piece_table.write_to_loc(20, "test");
-        if let Err(PieceTableError::GotBadLoc) = output {} else { panic!() }
+        if let Err(PieceTableError::GotBadLoc) = output {
+        } else {
+            panic!()
+        }
     }
 
     #[test]
@@ -315,5 +345,4 @@ mod tests {
         let new_string = piece_table.write_contents_to_string();
         assert_eq!(&new_string, "hello123 world");
     }
-
 }

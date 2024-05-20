@@ -1,8 +1,8 @@
 use text_editor::editor::*;
-use text_editor::terminal::{ self, input_stream_editor };
+use text_editor::terminal::{self, input_stream_editor};
 
 fn main() {
-    // Set up terminal and editor 
+    // Set up terminal and editor
     let original_termios = input_stream_editor::activate_stdin_raw_mode();
     let mut editor = match Editor::build() {
         Ok(editor) => editor,
