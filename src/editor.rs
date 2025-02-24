@@ -36,6 +36,7 @@ impl Cursor {
 
 pub struct Editor {
     pub status: EditorStatus,
+    pub window: terminal_utils::WindowSize,
     pub screen_rows: usize,
     pub screen_colums: usize,
     pub text_buffer: PieceTable,
@@ -47,8 +48,7 @@ impl Editor {
         if let Some(size) = terminal_utils::get_terminal_size() {
             Ok(Self {
                 status: EditorStatus::RefershScreen,
-                screen_rows: size.rows,
-                screen_colums: size.cols,
+                window: size,
                 text_buffer: PieceTable::new(),
                 cursor: Cursor::new(),
             })
@@ -118,7 +118,10 @@ pub fn editor_refresh_screen(editor: &Editor) -> io::Result<()> {
 pub fn kill_editor(original_termios: Termios, status: EditorStatus) -> ! {
     crate::terminal::input_stream_editor::recover_original_stdin_mode(original_termios);
 
+    // Clear contents of terminal
     print!("\x1b[2J");
+
+    //Move cursor to top
     print!("\x1b[H");
 
     match io::stdout().flush() {

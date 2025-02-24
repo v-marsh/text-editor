@@ -9,6 +9,7 @@ fn main() {
         Err(e) => kill_editor(original_termios, EditorStatus::FailedToBuild(e)),
     };
 
+    // Main event loop
     loop {
         if let Err(e) = editor_refresh_screen(&editor) {
             editor.status = EditorStatus::FailedToRefresh(e);
