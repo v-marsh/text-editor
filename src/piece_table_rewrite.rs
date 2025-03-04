@@ -1,72 +1,36 @@
-use std::ops::{self, Add, Sub}
-
-#[derive(Debug)]
-pub enum PieceTableError {
-    GotBadPieceID,
-    GotBadPieceRange,
-    GotBadLoc,
-    IOError(std::io::Error),
-}
+//#[derive(Debug)]
+//pub enum PieceTableError {
+//    GotBadPieceID,
+//    GotBadPieceRange,
+//    GotBadLoc,
+//    IOError(std::io::Error),
+//}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum PieceBuf {
-    ORIGINAL,
-    ADDITION,
-}
-#[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub struct Position(usize);
-
-impl Position {
-    pub fn change_position(&mut self, distance: usize) {
-        self.0 += distance;
-        if self.0 < 0 {
-            self.0 = 0;
-        }
-    }
-}
-
-impl Add for Position {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Position(self.0 + rhs.0)
-    }
-}
-
-impl Sub for Position {
-    type Output = Self;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        Position(self.0 - rhs.0)
-    }
+pub enum BufferType {
+    READ,
+    APPEND,
 }
 
 #[derive(Debug)]
 struct Piece {
-    pub start: Position,
-    pub stop: Position,
-    pub content: PieceBuf,
-}
-
-impl Piece {
-    fn len(&self) -> usize {
-        self.stop.0 - self.start.0
-    }
+    pub start: usize,
+    pub len: usize,
+    pub buffer: BufferType,
 }
 
 struct WriteLocation {
-    position: Position,
+    position: usize,
     piece_id: usize,
 }
 pub struct PieceTable {
-    /// An immutable buffer containing the contents of the original
-    /// string.
-    original: String,
-    /// A write-only buffer containing updates to the contents of the
+    /// An read-only buffer containing the original contents.
+    read: String,
+    /// A append-only buffer containing updates to the contents of the
     /// original buffer.
-    addition: String,
+    append: String,
     /// A ordered collection of pieces used to specify how the new
-    /// buffer in constructed from the `original` and `addition`
+    /// buffer in constructed from the `read` and `append`
     /// buffers.
     pieces: Vec<Piece>,
     /// Used to denote the location of the previous `insert` command,
@@ -79,10 +43,10 @@ pub struct PieceTable {
 
 impl PieceTable {
     /// Create a `PieceTable` from `s`.
-    pub fn new(s:String) -> Self {
+    pub fn new(buf: String) -> Self {
         let mut pieces = Vec::new();
-        pieces.push(Piece { start: Position(0), stop: Position(s.len()), content: PieceBuf::ORIGINAL });
-        Self { original: s, addition: String::new(), pieces, previous_write: None }
+        pieces.push(Piece { start: 0, len: buf.len(), buffer: BufferType::READ });
+        Self { read: buf, append: String::new(), pieces, previous_write: None }
     }
 
     /// Insert `content` at `position`.
@@ -91,20 +55,52 @@ impl PieceTable {
     /// return the number of characters written. If position is greater
     /// than the length of the piece table then the content will be
     /// appended to the end of the piece table.
-    pub fn insert(&mut self, position: Position, content: &str) {
+    pub fn insert(&mut self, position: usize, content: &str) {
+
+        // Determine the index of the piece to edit
+        let idx: usize;
+        let idx_opt: Option<usize> = None;
+        if position == 0 {
+            idx_opt = Some(0);
+        } else {
+            let mut counter = 0;
+            for (i, piece) in self.pieces.iter().enumerate() {
+                if position < counter + piece.len {
+                    idx_opt = Some(i);
+                    break;
+                }
+                counter += piece.len;
+            }
+            idx = idx_opt.or(Some(counter)).expect("");
+        }
+
+        // Determine if the edit occurs at the edge
+        let is_edge: bool;
+        let is_edge_opt: Option<bool> = None;
+        if position == 0 {
+            is_edge_opt = Some(true);
+        } else {
+            let mut counter = 0;
+            for (i, piece) in self.pieces.iter().enumerate() {
+                if position == counter + piece.len {
+                    is_edge_opt = Some(true);
+                    break;
+                }
+                counter += piece.len;
+            }
+            is_edge = is_edge_opt.or(Some(false)).expect("");
+        }
+
+        if idx != 0 && is_edge {
+
+        }
 
         // Append to piece from last insert if a valid write_location
         // exists.
         if let Some(write_location) = &self.previous_write {
             if position == write_location.position {
-                self.addition.push_str(content);
-                self.pieces
-                    .get_mut(write_location.piece_id)
-                    // unwrap here since a valid write_location is
-                    // assumed for speed.
-                    .unwrap()
-                    .stop
-                    .change_position(content.len());
+                self.append.push_str(content);
+                self.pieces.get_mut(write_location.piece_id).expect("").len += content.len();
             }
         }
 
@@ -112,13 +108,13 @@ impl PieceTable {
         let mut position = position;
         let mut piece: Option<&Piece> = None;
         let mut piece_id: Option<usize> = None;
-        let mut piece_start_loc: Option<Position> = None;
-        let mut current_loc = Position(0);
-        let mut next_loc = Position(0);
+        let mut piece_start_loc: Option<usize> = None;
+        let mut current_loc = 0;
+        let mut next_loc = 0;
 
         // Find the piece containing 'position' within its range
         for (id, _piece) in self.pieces.iter().enumerate() {
-            next_loc = next_loc + _piece.stop - _piece.start;
+            next_loc = next_loc + _piece.len
             if next_loc >= position {
                 // This can always be safely unwrapped since 'id' is
                 // bounded by the length of self.pieces.
@@ -154,11 +150,11 @@ impl PieceTable {
         }
 
         // Insert the new piece
-        let start = Position(self.addition.len());
-        self.addition.push_str(content);
-        let stop = Position(self.addition.len());
+        let start = Position(self.append.len());
+        self.append.push_str(content);
+        let stop = Position(self.append.len());
         let n_chars = stop.0 - start.0;
-        let new_piece = Piece { start, stop, content: PieceBuf::ADDITION };
+        let new_piece = Piece { start, stop, buffer: BufferType::APPEND };
         self.pieces.insert(new_piece_id, new_piece);
 
         // Update write location for faster insert
@@ -179,15 +175,37 @@ impl PieceTable {
 
     }
 
+    /// Join pieces to from read and append buffers.
+    pub fn display_result(&self) -> String {
+        let mut result = String::new();
+        for piece in self.pieces.iter() {
+            match piece.buffer {
+                BufferType::READ => result.push_str(&self.read.as_str()[piece.start.0..piece.stop.0]),
+                BufferType::APPEND => result.push_str(&self.append.as_str()[piece.start.0..piece.stop.0]),
+            }
+        }
+        return result
+    }
+
     fn split_piece(&mut self, piece_id: usize, piece_position: Position) -> Result<(),()> {
         let mut left = self.pieces.get_mut(piece_id).ok_or(())?;
         let right = Piece{
             start: left.start + piece_position,
 			stop: left.stop,
-			content: PieceBuf::ADDITION
+			buffer: BufferType::APPEND
         };
         left.stop = right.start;
         self.pieces.insert(piece_id + 1, right);
         Ok(())
     }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn testing(){}
+
 }
