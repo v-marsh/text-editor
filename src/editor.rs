@@ -37,8 +37,6 @@ impl Cursor {
 pub struct Editor {
     pub status: EditorStatus,
     pub window: terminal_utils::WindowSize,
-    pub screen_rows: usize,
-    pub screen_colums: usize,
     pub text_buffer: PieceTable,
     pub cursor: Cursor,
 }
@@ -49,7 +47,7 @@ impl Editor {
             Ok(Self {
                 status: EditorStatus::RefershScreen,
                 window: size,
-                text_buffer: PieceTable::new(),
+                text_buffer: PieceTable::new(""),
                 cursor: Cursor::new(),
             })
         } else {
@@ -102,10 +100,10 @@ pub fn editor_refresh_screen(editor: &Editor) -> io::Result<()> {
     print!(" 1  \r\n");
 
     // Draw rows of tiles (like vim) minus first row
-    editor_draw_empty_rows(editor.screen_rows - 2);
+    editor_draw_empty_rows(editor.window.rows - 2);
 
     // Move cursor to top
-    print!("\x1b[{}A", editor.screen_rows);
+    print!("\x1b[{}A", editor.window.rows);
 
     // Move cursor left 2
     print!("\x1b[4C");
